@@ -1,3 +1,9 @@
+#include <marl/defer.h>
+#include <marl/event.h>
+#include <marl/scheduler.h>
+#include <marl/ticket.h>
+#include <marl/waitgroup.h>
+
 #include <algorithm>
 #include <charconv>
 #include <fstream>
@@ -8,12 +14,6 @@
 #include <string_view>
 #include <utility>
 #include <vector>
-
-#include <marl/defer.h>
-#include <marl/event.h>
-#include <marl/scheduler.h>
-#include <marl/ticket.h>
-#include <marl/waitgroup.h>
 
 struct measurement_t {
   float min;
