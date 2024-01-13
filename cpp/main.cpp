@@ -38,7 +38,13 @@ static std::pair<std::string_view, std::string_view> split_by(
   return split_strs;
 }
 
-static size_t process_chunk(
+static size_t preprocess_chunk(std::span<const char> buffer) {
+  std::string_view data(buffer.data(), buffer.size());
+  // find the last newline and return how many bytes are left
+  return data.size() - (data.find_last_of('\n') + 1);
+}
+
+static void process_chunk(
   std::span<const char> buffer,
   std::map<std::string, measurement_t, std::less<>>& stations) {
   std::string_view data(buffer.data(), buffer.size());
@@ -47,7 +53,18 @@ static size_t process_chunk(
     const auto line = data.substr(0, next);
     constexpr std::string_view separator = ";";
     const auto station_temp = split_by(line, separator);
-    float temperature = std::stof(std::string(station_temp.second));
+    const auto temp_parts = split_by(station_temp.second, ".");
+    int32_t temp_whole;
+    std::from_chars(
+      temp_parts.first.data(),
+      temp_parts.first.data() + temp_parts.first.size(), temp_whole);
+    int32_t temp_fraction;
+    std::from_chars(
+      temp_parts.second.data(),
+      temp_parts.second.data() + temp_parts.second.size(), temp_fraction);
+    const float temperature = std::copysign(
+      float((std::abs(temp_whole) * 100) + (temp_fraction * 10)) / 100.0f,
+      (float)temp_whole);
     if (auto it = stations.find(station_temp.first); it != stations.end()) {
       it->second.min = std::min(it->second.min, temperature);
       it->second.max = std::max(it->second.max, temperature);
@@ -56,12 +73,18 @@ static size_t process_chunk(
     } else {
       stations.insert(
         {std::string(station_temp.first),
-         {temperature, temperature, temperature, 1}});
+         {temperature, temperature, temperature, 1.0}});
     }
     // move to next line
     data.remove_prefix(next + 1);
   }
-  return data.size();
+}
+
+std::map<std::string, measurement_t, std::less<>> worker(
+  std::vector<char> buffer) {
+  std::map<std::string, measurement_t, std::less<>> stations;
+  process_chunk(buffer, stations);
+  return stations;
 }
 
 int main() {
@@ -72,20 +95,52 @@ int main() {
     return 1;
   }
 
-  const size_t buffer_size = 1024; // 1MB
+  marl::Scheduler scheduler(marl::Scheduler::Config::allCores());
+  scheduler.bind();
+  defer(scheduler.unbind());
+
+  std::vector<std::map<std::string, measurement_t, std::less<>>> stations;
+
+  const size_t buffer_size = 1024 * 1024 * 4; // 4MB
   std::vector<char> buffer(buffer_size);
 
   size_t offset = 0;
   std::map<std::string, measurement_t, std::less<>> all_stations;
+  marl::WaitGroup wait_group;
+  marl::mutex mutex;
   while (file) {
     file.read(buffer.data() + offset, buffer.size() - offset);
     std::streamsize bytes_read_count = file.gcount();
     // resize buffer to actual data size
     buffer.resize(bytes_read_count + offset);
-    offset = process_chunk(buffer, all_stations);
+    wait_group.add(1);
+    offset = preprocess_chunk(buffer);
+    marl::schedule([buffer, &stations, &wait_group, &mutex] {
+      defer(wait_group.done());
+      auto station = worker(buffer);
+      {
+        marl::lock lock(mutex);
+        stations.push_back(std::move(station));
+      }
+    });
     std::copy(buffer.end() - offset, buffer.end(), buffer.begin());
     // resize buffer back to original size for next read
     buffer.resize(buffer_size);
+  }
+
+  wait_group.wait();
+
+  for (auto& station : stations) {
+    for (const auto& [s, m] : station) {
+      if (auto it = all_stations.find(s); it != all_stations.end()) {
+        it->second.min = std::min(it->second.min, m.min);
+        it->second.max = std::max(it->second.max, m.max);
+        it->second.total += m.total;
+        it->second.count += m.count;
+      } else {
+        all_stations.insert({s, m});
+      }
+    }
   }
 
   const auto rounded = [](const double value) {
