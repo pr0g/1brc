@@ -1,7 +1,6 @@
 #include <marl/defer.h>
 #include <marl/event.h>
 #include <marl/scheduler.h>
-#include <marl/ticket.h>
 #include <marl/waitgroup.h>
 
 #include <algorithm>
@@ -151,7 +150,7 @@ int main() {
     [&rounded](std::map<std::string, measurement_t, std::less<>>::iterator it) {
       const auto& [station, measurement] = *it;
       std::cout << station << '=' << measurement.min << '/'
-                << rounded(measurement.total / (double)measurement.count) << '/'
+                << rounded(measurement.total / measurement.count) << '/'
                 << measurement.max;
     };
 
