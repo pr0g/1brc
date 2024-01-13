@@ -92,22 +92,23 @@ int main() {
     return std::copysign(std::round(std::abs(value) * 10) / 10, value);
   };
 
-  // output
+  const auto output_element =
+    [&rounded](std::map<std::string, measurement_t, std::less<>>::iterator it) {
+      const auto& [station, measurement] = *it;
+      std::cout << station << '=' << measurement.min << '/'
+                << rounded(measurement.total / (double)measurement.count) << '/'
+                << measurement.max;
+    };
 
   std::cout << std::fixed;
   std::cout << std::setprecision(1);
   std::cout << "{";
   auto it = all_stations.begin();
   for (; it != std::prev(all_stations.end()); ++it) {
-    const auto& [station, measurement] = *it;
-    std::cout << station << '=' << measurement.min << '/'
-              << rounded(measurement.total / (double)measurement.count) << '/'
-              << measurement.max << ", ";
+    output_element(it);
+    std::cout << ", ";
   }
-  const auto& [station, measurement] = *it;
-  std::cout << station << '=' << measurement.min << '/'
-            << rounded(measurement.total / (double)measurement.count) << '/'
-            << measurement.max;
+  output_element(it);
   std::cout << "}\n";
 
   return 0;
