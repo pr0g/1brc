@@ -43,9 +43,9 @@ static size_t preprocess_chunk(std::span<const char> buffer) {
   return data.size() - (data.find_last_of('\n') + 1);
 }
 
-static void process_chunk(
-  std::span<const char> buffer,
-  std::map<std::string, measurement_t, std::less<>>& stations) {
+static std::map<std::string, measurement_t, std::less<>> process_chunk(
+  std::span<const char> buffer) {
+  std::map<std::string, measurement_t, std::less<>> stations;
   std::string_view data(buffer.data(), buffer.size());
   for (auto next = data.find('\n'); next != std::string_view::npos;
        next = data.find('\n')) {
@@ -77,12 +77,6 @@ static void process_chunk(
     // move to next line
     data.remove_prefix(next + 1);
   }
-}
-
-std::map<std::string, measurement_t, std::less<>> worker(
-  std::vector<char> buffer) {
-  std::map<std::string, measurement_t, std::less<>> stations;
-  process_chunk(buffer, stations);
   return stations;
 }
 
@@ -116,7 +110,7 @@ int main() {
     offset = preprocess_chunk(buffer);
     marl::schedule([buffer, &stations, &wait_group, &mutex] {
       defer(wait_group.done());
-      auto station = worker(buffer);
+      auto station = process_chunk(buffer);
       {
         marl::lock lock(mutex);
         stations.push_back(std::move(station));
