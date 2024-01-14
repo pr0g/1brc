@@ -49,8 +49,8 @@ static std::map<std::string, measurement_t, std::less<>> process_chunk(
   std::string_view data(buffer.data(), buffer.size());
   for (auto next = data.find('\n'); next != std::string_view::npos;
        next = data.find('\n')) {
-    const auto line = data.substr(0, next);
     constexpr std::string_view separator = ";";
+    const auto line = data.substr(0, next);
     const auto station_temp = split_by(line, separator);
     const auto temp_parts = split_by(station_temp.second, ".");
     int32_t temp_whole;
@@ -94,7 +94,7 @@ int main() {
 
   std::vector<std::map<std::string, measurement_t, std::less<>>> stations;
 
-  const size_t buffer_size = 1024 * 1024 * 4; // 4MB
+  constexpr size_t buffer_size = 1024 * 1024 * 4; // 4MB
   std::vector<char> buffer(buffer_size);
 
   size_t offset = 0;
@@ -103,7 +103,7 @@ int main() {
   marl::mutex mutex;
   while (file) {
     file.read(buffer.data() + offset, buffer.size() - offset);
-    std::streamsize bytes_read_count = file.gcount();
+    const std::streamsize bytes_read_count = file.gcount();
     // resize buffer to actual data size
     buffer.resize(bytes_read_count + offset);
     wait_group.add(1);
